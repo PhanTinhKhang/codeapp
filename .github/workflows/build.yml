@@ -1,49 +1,95 @@
-name: Build CodeApp IPA
+name: Build & Deploy to TestFlight
 
 on:
-  workflow_dispatch:
+
+  push:
+
+    branches: [main]
+
+
+
+concurrency:
+
+  group: ${{ github.ref }}
+
+  cancel-in-progress: true
+
+
 
 jobs:
-  build:
-    runs-on: macos-14
+
+  deploy:
+
+    name: Deploying to TestFlight
+
+    runs-on: macOS-26
+
+
 
     steps:
+
       - name: Checkout repository
-        uses: actions/checkout@v4
+
+        uses: actions/checkout@v3
+
         with:
-          submodules: recursive
+
           fetch-depth: 0
 
-      - name: Download Frameworks
-        run: |
-          chmod +x ./downloadFrameworks.sh
-          ./downloadFrameworks.sh
 
-      - name: Build Xcode Project (Unsigned)
-        run: |
-          xcodebuild build \
-            -project Code.xcodeproj \
-            -target "Code" \
-            -destination "generic/platform=iOS" \
-            -configuration Release \
-            SYMROOT="$(pwd)/build" \
-            CODE_SIGNING_ALLOWED=NO \
-            CODE_SIGNING_REQUIRED=NO \
-            CODE_SIGN_IDENTITY="" \
-            CODE_SIGN_ENTITLEMENTS="" \
-            CODE_SIGNING_INJECT_BASE_ENTITLEMENTS=NO
 
-      - name: Package to IPA
-        run: |
-          mkdir -p Payload
-          # Tìm file .app trong thư mục đầu ra của SYMROOT
-          find build/Release-iphoneos -maxdepth 1 -name "*.app" -exec cp -r {} Payload/ \;
-          zip -qr CodeApp.ipa Payload
-          rm -rf Payload
+      - name: Deploy iOS Beta to TestFlight via Fastlane
 
-      - name: Upload IPA Artifact
+        run: fastlane beta
+
+        env:
+
+          APP_STORE_CONNECT_TEAM_ID: "${{ secrets.APP_STORE_CONNECT_TEAM_ID }}"
+
+          DEVELOPER_APP_ID: "${{ secrets.DEVELOPER_APP_ID }}"
+
+          DEVELOPER_APP_IDENTIFIER: "${{ secrets.DEVELOPER_APP_IDENTIFIER }}"
+
+          DEVELOPER_APP_EXTENSION_IDENTIFIER: "${{ secrets.DEVELOPER_APP_EXTENSION_IDENTIFIER }}"
+
+          DEVELOPER_PORTAL_TEAM_ID: "${{ secrets.DEVELOPER_PORTAL_TEAM_ID }}"
+
+          FASTLANE_APPLE_ID: "${{ secrets.FASTLANE_APPLE_ID }}"
+
+          FASTLANE_APPLE_APPLICATION_SPECIFIC_PASSWORD: "${{ secrets.FASTLANE_APPLE_APPLICATION_SPECIFIC_PASSWORD }}"
+
+          MATCH_PASSWORD: "${{ secrets.MATCH_PASSWORD }}"
+
+          GIT_AUTHORIZATION: "${{ secrets.GIT_AUTHORIZATION }}"
+
+          PROVISIONING_PROFILE_SPECIFIER: "${{ secrets.PROVISIONING_PROFILE_SPECIFIER }}"
+
+          TEMP_KEYCHAIN_PASSWORD: "${{ secrets.TEMP_KEYCHAIN_PASSWORD }}"
+
+          TEMP_KEYCHAIN_USER: "${{ secrets.TEMP_KEYCHAIN_USER }}"
+
+          APPLE_KEY_ID: "${{ secrets.APPLE_KEY_ID }}"
+
+          APPLE_ISSUER_ID: "${{ secrets.APPLE_ISSUER_ID }}"
+
+          APPLE_KEY_CONTENT: "${{ secrets.APPLE_KEY_CONTENT }}"
+
+          JUDGE0_KEY: ""
+
+          JUDGE0_ENDPOINT: ""
+
+          DISTRIBUTE_EXTERNAL: "true"
+
+          XCODE_PATH: "/Applications/Xcode_26.2.app"
+
+
+
+      - name: Upload Artifact
+
         uses: actions/upload-artifact@v4
+
         with:
-          name: CodeApp-IPA
-          path: CodeApp.ipa
-          retention-days: 7
+
+          name: ipa-build
+
+          path: Code.ipa
