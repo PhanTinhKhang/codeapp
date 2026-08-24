@@ -1,95 +1,47 @@
-name: Build & Deploy to TestFlight
-
+name: Build CodeApp IPA
 on:
-
-  push:
-
-    branches: [main]
-
-
+  workflow_dispatch: # Đổi sang kích hoạt thủ công khi cần
 
 concurrency:
-
   group: ${{ github.ref }}
-
   cancel-in-progress: true
 
-
-
 jobs:
-
-  deploy:
-
-    name: Deploying to TestFlight
-
-    runs-on: macOS-26
-
-
+  build:
+    name: Building Unsigned IPA
+    runs-on: macos-14
 
     steps:
-
       - name: Checkout repository
-
-        uses: actions/checkout@v3
-
+        uses: actions/checkout@v4
         with:
-
           fetch-depth: 0
 
+      - name: Download Frameworks
+        run: |
+          chmod +x ./downloadFrameworks.sh
+          ./downloadFrameworks.sh
 
+      - name: Build IPA via Fastlane
+        run: |
+          fastlane gym \
+            --project "Code.xcodeproj" \
+            --scheme "Code" \
+            --clean true \
+            --skip_package_ipa true \
+            --skip_codesigning true \
+            --skip_profile_detection true \
+            --derived_data_path "build" \
+            --xcargs "CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY='' DEVELOPMENT_TEAM='' ASSETCATALOG_COMPILER_GENERATE_ASSET_SYMBOLS=NO"
 
-      - name: Deploy iOS Beta to TestFlight via Fastlane
-
-        run: fastlane beta
-
-        env:
-
-          APP_STORE_CONNECT_TEAM_ID: "${{ secrets.APP_STORE_CONNECT_TEAM_ID }}"
-
-          DEVELOPER_APP_ID: "${{ secrets.DEVELOPER_APP_ID }}"
-
-          DEVELOPER_APP_IDENTIFIER: "${{ secrets.DEVELOPER_APP_IDENTIFIER }}"
-
-          DEVELOPER_APP_EXTENSION_IDENTIFIER: "${{ secrets.DEVELOPER_APP_EXTENSION_IDENTIFIER }}"
-
-          DEVELOPER_PORTAL_TEAM_ID: "${{ secrets.DEVELOPER_PORTAL_TEAM_ID }}"
-
-          FASTLANE_APPLE_ID: "${{ secrets.FASTLANE_APPLE_ID }}"
-
-          FASTLANE_APPLE_APPLICATION_SPECIFIC_PASSWORD: "${{ secrets.FASTLANE_APPLE_APPLICATION_SPECIFIC_PASSWORD }}"
-
-          MATCH_PASSWORD: "${{ secrets.MATCH_PASSWORD }}"
-
-          GIT_AUTHORIZATION: "${{ secrets.GIT_AUTHORIZATION }}"
-
-          PROVISIONING_PROFILE_SPECIFIER: "${{ secrets.PROVISIONING_PROFILE_SPECIFIER }}"
-
-          TEMP_KEYCHAIN_PASSWORD: "${{ secrets.TEMP_KEYCHAIN_PASSWORD }}"
-
-          TEMP_KEYCHAIN_USER: "${{ secrets.TEMP_KEYCHAIN_USER }}"
-
-          APPLE_KEY_ID: "${{ secrets.APPLE_KEY_ID }}"
-
-          APPLE_ISSUER_ID: "${{ secrets.APPLE_ISSUER_ID }}"
-
-          APPLE_KEY_CONTENT: "${{ secrets.APPLE_KEY_CONTENT }}"
-
-          JUDGE0_KEY: ""
-
-          JUDGE0_ENDPOINT: ""
-
-          DISTRIBUTE_EXTERNAL: "true"
-
-          XCODE_PATH: "/Applications/Xcode_26.2.app"
-
-
+          mkdir -p Payload
+          find build -name "*.app" -maxdepth 3 -exec cp -r {} Payload/ \;
+          zip -qr Code.ipa Payload
+          rm -rf Payload
 
       - name: Upload Artifact
-
         uses: actions/upload-artifact@v4
-
         with:
-
           name: ipa-build
-
           path: Code.ipa
+          retention-days: 7
