@@ -9,18 +9,14 @@ concurrency:
 
 jobs:
   build:
-    name: Building Unsigned IPA
+    name: Build Unsigned IPA
     runs-on: macos-14
-
-    env:
-      FASTLANE_SKIP_UPDATE_CHECK: "true"
-      FASTLANE_HIDE_CHANGELOG: "true"
-      CI: "true"
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
+          submodules: recursive
           fetch-depth: 0
 
       - name: Download Frameworks
@@ -28,28 +24,33 @@ jobs:
           chmod +x ./downloadFrameworks.sh
           ./downloadFrameworks.sh
 
-      - name: Build IPA via Fastlane
+      - name: Build Target Directly (Bypass Scheme)
         run: |
-          fastlane gym \
-            --project "Code.xcodeproj" \
-            --scheme "Code" \
-            --clean true \
-            --skip_package_ipa true \
-            --skip_codesigning true \
-            --skip_profile_detection true \
-            --derived_data_path "build" \
-            --xcargs "CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY='' DEVELOPMENT_TEAM='' ASSETCATALOG_COMPILER_GENERATE_ASSET_SYMBOLS=NO"
+          xcodebuild build \
+            -project Code.xcodeproj \
+            -target "Code" \
+            -configuration Release \
+            SYMROOT="$(pwd)/build" \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_IDENTITY="" \
+            CODE_SIGN_ENTITLEMENTS="" \
+            CODE_SIGNING_INJECT_BASE_ENTITLEMENTS=NO \
+            ENABLE_PREVIEWS=NO \
+            DEVELOPMENT_ASSET_PATHS="" \
+            ASSETCATALOG_COMPILER_GENERATE_ASSET_SYMBOLS=NO
 
       - name: Package App to IPA
         run: |
           mkdir -p Payload
-          find build -name "*.app" -maxdepth 3 -exec cp -r {} Payload/ \;
-          zip -qr Code.ipa Payload
+          # Tìm và đóng gói chính xác file .app
+          find build/Release-iphoneos -maxdepth 1 -name "*.app" -exec cp -r {} Payload/ \;
+          zip -qr CodeApp.ipa Payload
           rm -rf Payload
 
-      - name: Upload Artifact
+      - name: Upload IPA Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: ipa-build
-          path: Code.ipa
+          name: CodeApp-IPA
+          path: CodeApp.ipa
           retention-days: 7
