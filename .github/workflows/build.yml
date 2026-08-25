@@ -43,6 +43,7 @@ jobs:
             CODE_SIGNING_REQUIRED=NO \
             CODE_SIGN_IDENTITY="" \
             DEVELOPMENT_TEAM="" \
+            ASSETCATALOG_COMPILER_INCLUDE_ALL_APPICON_ASSETS=YES \
             -derivedDataPath build \
             clean build
 
