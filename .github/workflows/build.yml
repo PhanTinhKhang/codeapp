@@ -1,56 +1,51 @@
-name: Build CodeApp IPA
+name: Build Code App (unsigned IPA)
 
 on:
-  workflow_dispatch:
-
-concurrency:
-  group: ${{ github.ref }}
-  cancel-in-progress: true
+  workflow_dispatch: {}   # cho phép bấm "Run workflow" thủ công trên GitHub
+  push:
+    branches: [ main ]     # tự động build mỗi khi push lên main (xóa nếu không cần)
 
 jobs:
   build:
-    name: Build Unsigned IPA
-    runs-on: macos-14
+    runs-on: macos-15       # macOS runner của GitHub, có sẵn Xcode
 
     steps:
-      - name: Checkout repository
+      - name: Checkout code
         uses: actions/checkout@v4
         with:
-          submodules: recursive
-          fetch-depth: 0
+          submodules: recursive   # project dùng git submodules
 
-      - name: Download Frameworks
+      - name: Select Xcode version
+        run: sudo xcode-select -s /Applications/Xcode_16.app/Contents/Developer
+
+      - name: Download frameworks
         run: |
           chmod +x ./downloadFrameworks.sh
           ./downloadFrameworks.sh
 
-      - name: Build Target Directly (Bypass Scheme)
+      - name: Build unsigned .app
         run: |
-          xcodebuild build \
+          xcodebuild \
             -project Code.xcodeproj \
-            -target "Code" \
+            -scheme Code \
+            -sdk iphoneos \
             -configuration Release \
-            SYMROOT="$(pwd)/build" \
             CODE_SIGNING_ALLOWED=NO \
             CODE_SIGNING_REQUIRED=NO \
             CODE_SIGN_IDENTITY="" \
-            CODE_SIGN_ENTITLEMENTS="" \
-            CODE_SIGNING_INJECT_BASE_ENTITLEMENTS=NO \
-            ENABLE_PREVIEWS=NO \
-            DEVELOPMENT_ASSET_PATHS="" \
-            ASSETCATALOG_COMPILER_GENERATE_ASSET_SYMBOLS=NO
+            DEVELOPMENT_TEAM="" \
+            -derivedDataPath build \
+            clean build
 
-      - name: Package App to IPA
+      - name: Package into IPA
         run: |
           mkdir -p Payload
-          # Tìm và đóng gói chính xác file .app
-          find build/Release-iphoneos -maxdepth 1 -name "*.app" -exec cp -r {} Payload/ \;
-          zip -qr CodeApp.ipa Payload
-          rm -rf Payload
+          cp -r build/Build/Products/Release-iphoneos/*.app Payload/
+          zip -r CodeApp-unsigned.ipa Payload
 
-      - name: Upload IPA Artifact
+      - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: CodeApp-IPA
-          path: CodeApp.ipa
-          retention-days: 7
+          name: CodeApp-unsigned-ipa
+          path: CodeApp-unsigned.ipa
+          retention-days: 14
