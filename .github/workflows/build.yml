@@ -1,37 +1,43 @@
-name: Build Code App (unsigned IPA)
+name: Build Code App (signed with free Apple ID)
 
 on:
-  workflow_dispatch: {}   # cho phép bấm "Run workflow" thủ công trên GitHub
-  push:
-    branches: [ main ]     # tự động build mỗi khi push lên main (xóa nếu không cần)
+  workflow_dispatch: {}
 
 jobs:
   build:
-    runs-on: macos-15       # macOS runner của GitHub, có sẵn Xcode
+    runs-on: macos-15
+
+    env:
+      FASTLANE_USER: ${{ secrets.FASTLANE_USER }}
+      FASTLANE_SESSION: ${{ secrets.FASTLANE_SESSION }}
+      MATCH_GIT_URL: ${{ secrets.MATCH_GIT_URL }}
+      MATCH_PASSWORD: ${{ secrets.MATCH_PASSWORD }}
+      APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+      BUNDLE_ID: ${{ secrets.BUNDLE_ID }}
 
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
         with:
-          submodules: recursive   # project dùng git submodules
+          submodules: recursive
 
-      - name: List installed Xcode versions
-        run: ls /Applications | grep Xcode
-
-      - name: Show default Xcode & installed platforms
-        run: |
-          xcodebuild -version
-          xcodebuild -showsdks
+      - name: Install fastlane
+        run: gem install fastlane -NV
 
       - name: Download frameworks
         run: |
           chmod +x ./downloadFrameworks.sh
           ./downloadFrameworks.sh
 
-      - name: List available schemes
-        run: xcodebuild -project Code.xcodeproj -list
+      - name: Fetch signing certificate & provisioning profile via match
+        run: |
+          fastlane match development \
+            --readonly \
+            --git_url "$MATCH_GIT_URL" \
+            --team_id "$APPLE_TEAM_ID" \
+            --app_identifier "$BUNDLE_ID"
 
-      - name: Build unsigned .app
+      - name: Build & sign .ipa
         run: |
           xcodebuild \
             -project Code.xcodeproj \
@@ -39,23 +45,41 @@ jobs:
             -sdk iphoneos \
             -destination "generic/platform=iOS" \
             -configuration Release \
-            CODE_SIGNING_ALLOWED=NO \
-            CODE_SIGNING_REQUIRED=NO \
-            CODE_SIGN_IDENTITY="" \
-            DEVELOPMENT_TEAM="" \
-            ASSETCATALOG_COMPILER_INCLUDE_ALL_APPICON_ASSETS=YES \
             -derivedDataPath build \
-            clean build
+            -allowProvisioningUpdates \
+            CODE_SIGN_STYLE=Manual \
+            DEVELOPMENT_TEAM="$APPLE_TEAM_ID" \
+            PRODUCT_BUNDLE_IDENTIFIER="$BUNDLE_ID" \
+            PROVISIONING_PROFILE_SPECIFIER="match Development $BUNDLE_ID" \
+            CODE_SIGN_IDENTITY="Apple Development" \
+            clean archive \
+            -archivePath build/Code.xcarchive
 
-      - name: Package into IPA
+      - name: Export .ipa
         run: |
-          mkdir -p Payload
-          cp -r build/Build/Products/Release-iphoneos/*.app Payload/
-          zip -r CodeApp-unsigned.ipa Payload
+          cat > ExportOptions.plist << EOF
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0">
+          <dict>
+            <key>method</key>
+            <string>development</string>
+            <key>teamID</key>
+            <string>${APPLE_TEAM_ID}</string>
+            <key>signingStyle</key>
+            <string>manual</string>
+          </dict>
+          </plist>
+          EOF
+          xcodebuild -exportArchive \
+            -archivePath build/Code.xcarchive \
+            -exportPath build/ipa \
+            -exportOptionsPlist ExportOptions.plist \
+            -allowProvisioningUpdates
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: CodeApp-unsigned-ipa
-          path: CodeApp-unsigned.ipa
+          name: CodeApp-signed-ipa
+          path: build/ipa/*.ipa
           retention-days: 14
