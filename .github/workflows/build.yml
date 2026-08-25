@@ -30,7 +30,7 @@ jobs:
         run: |
           xcodebuild \
             -project Code.xcodeproj \
-            -scheme CodeApp \
+            -scheme "Code App" \
             -sdk iphoneos \
             -configuration Release \
             CODE_SIGNING_ALLOWED=NO \
